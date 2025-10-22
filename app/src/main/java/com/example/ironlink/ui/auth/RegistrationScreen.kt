@@ -1,87 +1,84 @@
 package com.example.ironlink.ui.auth
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
-import com.example.ironlink.BuildConfig
+import com.cloudinary.android.MediaManager
+import com.cloudinary.android.callback.ErrorInfo
+import com.cloudinary.android.callback.UploadCallback
+import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RegistrationScreen(navController: NavController, viewModel: AuthViewModel = viewModel()) {
+fun RegistrationScreen(navController: NavController, viewModel: AuthViewModel) {
     val context = LocalContext.current
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var fullName by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var selectedPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var fullName by rememberSaveable { mutableStateOf("") }
+    var profileImageUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var uploadedImageUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    var isUploading by rememberSaveable { mutableStateOf(false) }
+    var isRegistering by rememberSaveable { mutableStateOf(false) }
     var showImageSourceDialog by remember { mutableStateOf(false) }
 
-    val authState by viewModel.authState.collectAsState()
-
-    fun createImageUri(): Uri {
-        val file = File.createTempFile(
-            "JPEG_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}_",
-            ".jpg",
-            context.getExternalFilesDir(null)
-        )
-        return FileProvider.getUriForFile(
-            Objects.requireNonNull(context),
-            BuildConfig.APPLICATION_ID + ".provider",
-            file
-        )
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            profileImageUri = it
+            isUploading = true
+            uploadImageToCloudinary(context, it) { imageUrl, error ->
+                isUploading = false
+                if (imageUrl != null) {
+                    uploadedImageUrl = imageUrl
+                    Toast.makeText(context, "Image uploaded successfully!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Upload failed: $error", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) {
-            // ne radi se nista jer je selectedPhotoUri vec postavljen pre pokretanja kamere
-        }
-    }
-
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        selectedPhotoUri = uri
-    }
-
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        if (isGranted) {
-            val uri = createImageUri()
-            selectedPhotoUri = uri
-            cameraLauncher.launch(uri)
-        } else {
-            // korisnik je odbio dozvolu.
-        }
-    }
-
-    LaunchedEffect(authState) {
-        if (authState is AuthState.Success) {
-            navController.navigate("map") {
-                popUpTo("register") { inclusive = true }
+            profileImageUri?.let {
+                isUploading = true
+                uploadImageToCloudinary(context, it) { imageUrl, error ->
+                    isUploading = false
+                    if (imageUrl != null) {
+                        uploadedImageUrl = imageUrl
+                        Toast.makeText(context, "Image uploaded successfully!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Upload failed: $error", Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         }
     }
@@ -89,137 +86,184 @@ fun RegistrationScreen(navController: NavController, viewModel: AuthViewModel = 
     if (showImageSourceDialog) {
         AlertDialog(
             onDismissRequest = { showImageSourceDialog = false },
-            title = { Text("Choose image source") },
-            text = { Text("Select a source for your profile picture.") },
+            title = { Text("Choose Image Source") },
+            text = { Text("Select the source for your profile picture.") },
             confirmButton = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Button(onClick = {
-                        showImageSourceDialog = false
-                        when (PackageManager.PERMISSION_GRANTED) {
-                            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) -> {
-                                val uri = createImageUri()
-                                selectedPhotoUri = uri
-                                cameraLauncher.launch(uri)
-                            }
-                            else -> {
-                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                            }
-                        }
-                    }) {
-                        Text("Camera")
-                    }
-                    Button(onClick = {
-                        showImageSourceDialog = false
-                        imagePickerLauncher.launch("image/*")
-                    }) {
-                        Text("Gallery")
-                    }
+                TextButton(onClick = {
+                    showImageSourceDialog = false
+                    galleryLauncher.launch("image/*")
+                }) {
+                    Text("Gallery")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showImageSourceDialog = false
+                    val file = createPhotoFile(context)
+                    val uri = FileProvider.getUriForFile(
+                        Objects.requireNonNull(context),
+                        "com.example.ironlink.provider", file
+                    )
+                    profileImageUri = uri
+                    cameraLauncher.launch(uri)
+                }) {
+                    Text("Camera")
                 }
             }
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text("Register", style = MaterialTheme.typography.headlineLarge)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = username,
-            onValueChange = { username = it },
-            label = { Text("Username") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Password") },
-            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = fullName,
-            onValueChange = { fullName = it },
-            label = { Text("Full Name") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = phone,
-            onValueChange = { phone = it },
-            label = { Text("Phone") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = { showImageSourceDialog = true },
-            modifier = Modifier.fillMaxWidth()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Register") }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Text("Pick Photo")
-        }
+            if (profileImageUri != null) {
+                Image(
+                    painter = rememberAsyncImagePainter(profileImageUri),
+                    contentDescription = "Profile Image",
+                    modifier = Modifier
+                        .size(120.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
-        Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { showImageSourceDialog = true },
+                enabled = !isUploading,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (isUploading) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Uploading...")
+                } else {
+                    Text(if (profileImageUri == null) "Select Profile Picture" else "Change Picture")
+                }
+            }
 
-        selectedPhotoUri?.let { uri ->
-            Image(
-                painter = rememberAsyncImagePainter(uri),
-                contentDescription = "Selected photo",
-                modifier = Modifier
-                    .size(100.dp)
-                    .align(Alignment.CenterHorizontally),
-                contentScale = ContentScale.Crop
+            Spacer(modifier = Modifier.height(16.dp))
+
+            TextField(
+                value = fullName,
+                onValueChange = { fullName = it },
+                label = { Text("Full Name") },
+                modifier = Modifier.fillMaxWidth()
             )
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Button(
-            onClick = {
-                viewModel.register(username.trim(), password, fullName.trim(), phone.trim(), selectedPhotoUri, context)
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = username.isNotBlank() && password.isNotBlank() && fullName.isNotBlank() && phone.isNotBlank()
-        ) {
-            Text("Register")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        TextButton(onClick = { navController.navigate("login") }) {
-            Text("Already have an account? Login")
-        }
-
-        when (val state = authState) {
-            is AuthState.Loading -> CircularProgressIndicator(
-                modifier = Modifier.align(Alignment.CenterHorizontally)
+            TextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email") },
+                modifier = Modifier.fillMaxWidth()
             )
-            is AuthState.Error -> Text(
-                text = state.message,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 8.dp)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            TextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
             )
-            else -> {}
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    if (email.isNotBlank() && password.isNotBlank() && fullName.isNotBlank()) {
+                        isRegistering = true
+                        coroutineScope.launch {
+                            try {
+                                viewModel.register(
+                                    email = email,
+                                    password = password,
+                                    fullName = fullName,
+                                    profileImageUrl = uploadedImageUrl
+                                )
+                                navController.navigate("main") {
+                                    popUpTo("login") { inclusive = true }
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Registration failed: ${e.message}", Toast.LENGTH_LONG).show()
+                            } finally {
+                                isRegistering = false
+                            }
+                        }
+                    } else {
+                        Toast.makeText(context, "Please fill all fields", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isUploading && !isRegistering
+            ) {
+                if (isRegistering) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                } else {
+                    Text("Register")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            TextButton(onClick = { navController.navigate("login") }) {
+                Text("Already have an account? Login")
+            }
         }
     }
+}
+
+private fun uploadImageToCloudinary(
+    context: Context,
+    imageUri: Uri,
+    onComplete: (imageUrl: String?, error: String?) -> Unit
+) {
+    try {
+        MediaManager.get().upload(imageUri)
+            .unsigned("ml_default")
+            .option("resource_type", "image")
+            .callback(object : UploadCallback {
+                override fun onStart(requestId: String?) {}
+                override fun onProgress(requestId: String?, bytes: Long, totalBytes: Long) {}
+                override fun onSuccess(requestId: String?, resultData: Map<*, *>?) {
+                    val imageUrl = resultData?.get("secure_url") as? String
+                    onComplete(imageUrl, null)
+                }
+                override fun onError(requestId: String?, error: ErrorInfo?) {
+                    onComplete(null, error?.description ?: "Unknown error")
+                }
+                override fun onReschedule(requestId: String?, error: ErrorInfo?) {
+                    onComplete(null, "Upload rescheduled: ${error?.description}")
+                }
+            })
+            .dispatch()
+    } catch (e: Exception) {
+        onComplete(null, e.message)
+    }
+}
+
+private fun createPhotoFile(context: Context): File {
+    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+    val storageDir: File? = context.getExternalFilesDir(null)
+    return File.createTempFile(
+        "JPEG_${timeStamp}_",
+        ".jpg",
+        storageDir
+    )
 }

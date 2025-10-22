@@ -14,8 +14,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.ironlink.data.User
-import com.example.ironlink.ui.common.BottomNavigationBar // <-- DODAN IMPORT
-import com.example.ironlink.ui.common.getCurrentRoute      // <-- DODAN IMPORT
+import com.example.ironlink.ui.common.BottomNavigationBar
+import com.example.ironlink.ui.common.getCurrentRoute
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -42,13 +42,13 @@ fun LeaderboardPage(navController: NavController) {
                     .get().await()
 
                 val fetchedUsers = usersSnapshot.documents.mapNotNull { doc ->
-                    doc.toObject(User::class.java)?.copy(id = doc.id)
+                    doc.toObject(User::class.java)?.copy(uid = doc.id)
                 }
 
                 val sortedUsers = fetchedUsers.sortedByDescending { it.points }
                 val userWithPositionList = mutableListOf<UserWithPosition>()
                 var currentPosition = 1
-                var lastPoints = -1L
+                var lastPoints = -1
                 var lastPosition = 0
 
                 for (user in sortedUsers) {
@@ -140,7 +140,7 @@ fun LeaderboardItem(user: User, position: Int) {
                 Spacer(modifier = Modifier.width(32.dp))
             }
             Text(
-                text = user.username,
+                text = user.fullName,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(start = 16.dp)
             )

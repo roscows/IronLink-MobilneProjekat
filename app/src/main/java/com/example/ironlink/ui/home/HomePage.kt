@@ -79,7 +79,7 @@ fun ProfileContent(user: User, onLogout: () -> Unit) {
     ) {
         Image(
             painter = rememberAsyncImagePainter(
-                model = user.photoUrl,
+                model = user.profileImageUrl,
                 error = painterResource(id = R.drawable.ic_launcher_foreground),
                 placeholder = painterResource(id = R.drawable.ic_launcher_foreground)
             ),
@@ -98,7 +98,7 @@ fun ProfileContent(user: User, onLogout: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "@${user.username}",
+            text = user.email,
             style = MaterialTheme.typography.titleMedium,
             color = Color.Gray
         )

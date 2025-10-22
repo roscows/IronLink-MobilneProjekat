@@ -52,6 +52,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview:1.6.8")
     implementation("androidx.compose.material3:material3:1.2.1")
     implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.3") // Dodato za LocalLifecycleOwner
 
     implementation("androidx.compose.material:material-icons-extended:1.6.8")
     implementation("androidx.compose.material:material-icons-core:1.6.8")
@@ -70,15 +71,19 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling:1.6.8")
     debugImplementation("androidx.compose.ui:ui-test-manifest:1.6.8")
 
-    // Za lokaciju i mape (tačka 2/3/4/5)
+    // Za lokaciju i mape
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("com.google.maps.android:maps-compose:6.11.0")
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("androidx.work:work-runtime-ktx:2.9.1")
-
-    // Volley (ostaje 1.2.1 – latest)
-    //implementation("com.android.volley:1.1.1")
-
-    // Media3 (ažurirano na latest 1.8.0 – rešava resolution)
+    
+    // Media3
     implementation("androidx.media3:media3-common:1.8.0")
+
+    // CameraX dependencies
+    val cameraxVersion = "1.3.1"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
 }
