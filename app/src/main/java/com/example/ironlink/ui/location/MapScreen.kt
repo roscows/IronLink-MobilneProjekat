@@ -6,7 +6,6 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
-import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,7 +24,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.ironlink.data.FilterCriteria
 import com.example.ironlink.data.TrainingPartner
 import com.example.ironlink.ui.common.BottomNavigationBar
@@ -53,7 +51,11 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 @Composable
-fun MapScreen(viewModel: LocationViewModel = viewModel(), navController: NavController) {
+fun MapScreen(
+    viewModel: LocationViewModel = viewModel(),
+    navController: NavController,
+    focusPartnerId: String? = null
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val auth = FirebaseAuth.getInstance()
@@ -79,6 +81,36 @@ fun MapScreen(viewModel: LocationViewModel = viewModel(), navController: NavCont
 
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     val mapView = remember { MapView(context) }
+
+    var hasZoomedToPartner by remember { mutableStateOf(false) }
+
+    LaunchedEffect(focusPartnerId) {
+        if (focusPartnerId != null && !hasZoomedToPartner) {
+            kotlinx.coroutines.delay(500)
+            try {
+                val doc = firestore.collection("training_partners")
+                    .document(focusPartnerId)
+                    .get()
+                    .await()
+
+                val partner = doc.toObject(TrainingPartner::class.java)
+                partner?.let {
+                    val lat = it.latitude
+                    val lng = it.longitude
+                    if (lat != null && lng != null) {
+                        val position = LatLng(lat, lng)
+                        googleMap?.animateCamera(
+                            CameraUpdateFactory.newLatLngZoom(position, 17f)
+                        )
+                        hasZoomedToPartner = true
+                    }
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Failed to find location", Toast.LENGTH_SHORT).show()
+                hasZoomedToPartner = true
+            }
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -343,9 +375,10 @@ fun FilterDialog(
 ) {
     var partnerName by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("") }
-    var startDate by remember { mutableStateOf<Date?>(null) }
-    var endDate by remember { mutableStateOf<Date?>(null) }
+    var selectedDate by remember { mutableStateOf<Date?>(null) }
     var radius by remember { mutableFloatStateOf(100f) }
+    var useRadiusFilter by remember { mutableStateOf(false) }
+
     val types = listOf("Fitness", "Bodybuilding", "Yoga", "Running", "Team Sport", "Other")
     var expanded by remember { mutableStateOf(false) }
 
@@ -361,16 +394,25 @@ fun FilterDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
                     TextField(
                         value = type,
                         onValueChange = {},
                         label = { Text("Type") },
                         readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                        },
                         modifier = Modifier.menuAnchor(),
                     )
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
                         types.forEach { item ->
                             DropdownMenuItem(
                                 text = { Text(item) },
@@ -382,13 +424,61 @@ fun FilterDialog(
                         }
                     }
                 }
+
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Radius: ${radius.toInt()} m")
-                Slider(value = radius, onValueChange = { radius = it }, valueRange = 0f..1000f, steps = 99, modifier = Modifier.padding(vertical = 8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = useRadiusFilter,
+                        onCheckedChange = { useRadiusFilter = it }
+                    )
+                    Text("Use Radius Filter")
+                }
+
+                if (useRadiusFilter) {
+                    Text("Radius: ${radius.toInt()} m")
+                    Slider(
+                        value = radius,
+                        onValueChange = { radius = it },
+                        valueRange = 0f..1000f,
+                        steps = 99,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
-                DatePicker(label = "Start Date", selectedDate = startDate, onDateChange = { startDate = it })
-                Spacer(modifier = Modifier.height(8.dp))
-                DatePicker(label = "End Date", selectedDate = endDate, onDateChange = { endDate = it })
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        DatePicker(
+                            label = "Select Date",
+                            selectedDate = selectedDate,
+                            onDateChange = { selectedDate = it }
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            // Resetuj polja
+                            partnerName = ""
+                            type = ""
+                            selectedDate = null
+                            radius = 100f
+                            useRadiusFilter = false
+                            // Primeni prazan filter
+                            onApply(FilterCriteria())
+                            onDismiss()
+                        },
+                        modifier = Modifier.align(Alignment.CenterVertically)
+                    ) {
+                        Text("Clear")
+                    }
+                }
             }
         },
         confirmButton = {
@@ -398,11 +488,8 @@ fun FilterDialog(
                         FilterCriteria(
                             partnerName = partnerName.takeIf { it.isNotBlank() },
                             type = type.takeIf { it.isNotBlank() },
-                            dateRange = Pair(
-                                startDate?.let { Timestamp(it) },
-                                endDate?.let { Timestamp(it) },
-                            ),
-                            radius = radius,
+                            selectedDate = selectedDate?.let { Timestamp(it) },
+                            radius = if (useRadiusFilter) radius else null,
                         ),
                     )
                     onDismiss()
@@ -411,7 +498,11 @@ fun FilterDialog(
                 Text("Apply")
             }
         },
-        dismissButton = { Button(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = {
+            Button(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
     )
 }
 
@@ -422,24 +513,23 @@ private fun loadPartnersOnMap(
     currentLocation: Location?,
     navController: NavController,
 ) {
-    objectsCollection.addSnapshotListener { snapshot, _ ->
-        snapshot?.let {
-            googleMap?.clear()
-            for (doc in it.documents) {
-                val partner = doc.toObject(TrainingPartner::class.java) ?: continue
-                val lat = partner.latitude ?: continue
-                val lng = partner.longitude ?: continue
+    objectsCollection.get().addOnSuccessListener { snapshot ->
+        googleMap?.clear()
+        for (doc in snapshot.documents) {
+            val partner = doc.toObject(TrainingPartner::class.java) ?: continue
+            val lat = partner.latitude ?: continue
+            val lng = partner.longitude ?: continue
 
-                val matches = filterMatches(partner, filterCriteria, currentLocation)
-                if (matches) {
-                    val position = LatLng(lat, lng)
-                    googleMap?.addMarker(
-                        MarkerOptions()
-                            .position(position)
-                            .title(partner.name ?: "Partner")
-                            .snippet("Type: ${partner.type}\nClick for details"),
-                    )?.tag = doc.id
-                }
+            val matches = filterMatches(partner, filterCriteria, currentLocation)
+            if (matches) {
+                val position = LatLng(lat, lng)
+                val marker = googleMap?.addMarker(
+                    MarkerOptions()
+                        .position(position)
+                        .title(partner.name ?: "Partner")
+                        .snippet("Type: ${partner.type}\nClick for details")
+                )
+                marker?.tag = doc.id
             }
         }
     }
@@ -451,20 +541,46 @@ private fun filterMatches(
     currentLocation: Location?,
 ): Boolean {
     if (criteria == null) return true
+
     val matchesType = criteria.type?.let { it == partner.type } ?: true
-    val matchesDate = criteria.dateRange?.let { (start, end) ->
-        val created = partner.dateCreated?.toDate() ?: return@let false
-        (start == null || created.after(start.toDate())) && (end == null || created.before(end.toDate()))
+
+    val matchesDate = criteria.selectedDate?.let { selectedTimestamp ->
+        val partnerDate = partner.eventTimestamp?.toDate() ?: partner.dateCreated?.toDate()
+        if (partnerDate == null) return@let false
+
+        val calendar = Calendar.getInstance()
+        calendar.time = selectedTimestamp.toDate()
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        val filterDateStart = calendar.time
+
+        calendar.set(Calendar.HOUR_OF_DAY, 23)
+        calendar.set(Calendar.MINUTE, 59)
+        calendar.set(Calendar.SECOND, 59)
+        val filterDateEnd = calendar.time
+
+        partnerDate.after(filterDateStart) && partnerDate.before(filterDateEnd) ||
+                partnerDate == filterDateStart
     } ?: true
+
     val matchesRadius = criteria.radius?.let { radius ->
         currentLocation?.let { loc ->
-            val distance = calculateDistance(loc.latitude, loc.longitude, partner.latitude ?: 0.0, partner.longitude ?: 0.0)
+            val distance = calculateDistance(
+                loc.latitude,
+                loc.longitude,
+                partner.latitude ?: 0.0,
+                partner.longitude ?: 0.0
+            )
             distance <= radius
         } ?: true
     } ?: true
+
     val matchesName = criteria.partnerName?.let { filterName ->
         partner.name?.contains(filterName, ignoreCase = true) ?: false
     } ?: true
+
     return matchesType && matchesDate && matchesRadius && matchesName
 }
 

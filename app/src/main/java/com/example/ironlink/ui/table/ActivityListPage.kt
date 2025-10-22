@@ -1,6 +1,7 @@
 package com.example.ironlink.ui.table
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -22,6 +23,7 @@ import kotlinx.coroutines.tasks.await
 import java.text.DecimalFormat
 
 data class TrainingPartnerWithRating(
+    val partnerId: String,
     val partner: TrainingPartner,
     val averageRating: Double
 )
@@ -39,8 +41,8 @@ fun ActivityListPage(navController: NavController) {
         coroutineScope.launch {
             try {
                 val partnersSnapshot = firestore.collection("training_partners").get().await()
-                val partners = partnersSnapshot.documents.map { doc ->
-                    val partner = doc.toObject(TrainingPartner::class.java) ?: return@map null
+                val partners = partnersSnapshot.documents.mapNotNull { doc ->
+                    val partner = doc.toObject(TrainingPartner::class.java) ?: return@mapNotNull null
                     val partnerId = doc.id
 
                     val ratingsSnapshot = firestore.collection("rates")
@@ -52,8 +54,8 @@ fun ActivityListPage(navController: NavController) {
                         ratings.map { it.value.toDouble() }.average()
                     } else 0.0
 
-                    TrainingPartnerWithRating(partner, averageRating)
-                }.filterNotNull()
+                    TrainingPartnerWithRating(partnerId, partner, averageRating)
+                }
 
                 partnersWithRatings = partners
             } catch (e: Exception) {
@@ -108,7 +110,9 @@ fun ActivityListPage(navController: NavController) {
                         TableRow(
                             partner = partnerWithRating.partner,
                             averageRating = partnerWithRating.averageRating,
-                            index = index
+                            index = index,
+                            partnerId = partnerWithRating.partnerId,
+                            navController = navController
                         )
                         Divider()
                     }
@@ -142,7 +146,13 @@ fun RowScope.DataCell(text: String, weight: Float) {
 }
 
 @Composable
-fun TableRow(partner: TrainingPartner, averageRating: Double, index: Int) {
+fun TableRow(
+    partner: TrainingPartner,
+    averageRating: Double,
+    index: Int,
+    partnerId: String,
+    navController: NavController
+) {
     val decimalFormat = DecimalFormat("#.##")
     val backgroundColor = if (index % 2 == 0) {
         MaterialTheme.colorScheme.surface
@@ -154,6 +164,9 @@ fun TableRow(partner: TrainingPartner, averageRating: Double, index: Int) {
         modifier = Modifier
             .fillMaxWidth()
             .background(backgroundColor)
+            .clickable {
+                navController.navigate("map/$partnerId")
+            }
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -173,4 +186,3 @@ fun getRatingColor(rating: Double): Color {
         else -> Color.Red
     }
 }
-

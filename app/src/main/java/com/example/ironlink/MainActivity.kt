@@ -89,7 +89,16 @@ fun Navigation(modifier: Modifier = Modifier, authViewModel: AuthViewModel) {
         composable("login") { LoginScreen(navController, authViewModel) }
         composable("register") { RegistrationScreen(navController, authViewModel) }
         composable("main") { HomePage(navController, authViewModel) }
-        composable("map") { MapScreen(viewModel(), navController) }
+
+        composable("map") {
+            MapScreen(viewModel(), navController, focusPartnerId = null)
+        }
+
+        composable("map/{partnerId}") { backStackEntry ->
+            val partnerId = backStackEntry.arguments?.getString("partnerId")
+            MapScreen(viewModel(), navController, focusPartnerId = partnerId)
+        }
+
         composable("leaderboard") { LeaderboardPage(navController) }
         composable("activities") { ActivityListPage(navController) }
         composable("details/{partnerId}") { backStackEntry ->
