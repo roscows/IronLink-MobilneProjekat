@@ -6,13 +6,15 @@ IronLink je Android aplikacija za pronalazenje i deljenje trening aktivnosti/par
 
 1. Pregled funkcionalnosti
 2. Tehnologije
-3. Struktura projekta
-4. Glavni tokovi u aplikaciji
-5. Podaci i kolekcije u Firestore
-6. Dozvole (permissions)
-7. Podesavanja i kljucevi
-8. Pokretanje projekta
-9. Firebase Cloud Functions
+3. Arhitektura i navigacija
+4. Struktura projekta
+5. Glavni tokovi u aplikaciji
+6. Podaci i kolekcije u Firestore
+7. Dozvole (permissions)
+8. Podesavanja i kljucevi
+9. Pokretanje projekta
+10. Firebase Cloud Functions
+11. Razvoj, testiranje i ogranicenja
 
 ## 1. Pregled funkcionalnosti
 
@@ -38,7 +40,30 @@ IronLink je Android aplikacija za pronalazenje i deljenje trening aktivnosti/par
 - CameraX (kamera)
 - Firebase Cloud Functions (TypeScript)
 
-## 3. Struktura projekta
+## 3. Arhitektura i navigacija
+
+### Navigacioni tokovi
+
+Compose Navigation rute:
+
+- `login` -> login ekran
+- `register` -> registracija
+- `main` -> profil korisnika
+- `map` -> mapa aktivnosti
+- `map/{partnerId}` -> fokus na izabranu aktivnost na mapi
+- `activities` -> tabela aktivnosti
+- `leaderboard` -> rang lista
+- `details/{partnerId}` -> detalji aktivnosti
+
+### Glavni slojevi
+
+- UI sloj (Compose): ekrani u `ui/*`
+- ViewModel sloj: `AuthViewModel`, `ProfileViewModel`, `LocationViewModel`
+- Data modeli: `data/*`
+- Servisi: `NotificationService` za foreground lokacione notifikacije
+- Backend: Firebase Auth + Firestore + Cloud Functions
+
+## 4. Struktura projekta
 
 - `app/` - Android aplikacija
 - `functions/` - Firebase Cloud Functions
@@ -55,7 +80,7 @@ Glavne klase:
 - `LeaderboardPage.kt` - rang lista korisnika
 - `NotificationService.kt` - lokacione notifikacije
 
-## 4. Glavni tokovi u aplikaciji
+## 5. Glavni tokovi u aplikaciji
 
 1. Registracija:
    - korisnik unosi ime, email, lozinku
@@ -81,7 +106,7 @@ Glavne klase:
    - foreground servis prati lokaciju
    - ako je korisnik < 100m od aktivnosti, dobija notifikaciju (cooldown 10 minuta)
 
-## 5. Podaci i kolekcije u Firestore
+## 6. Podaci i kolekcije u Firestore
 
 ### `users`
 
@@ -109,7 +134,7 @@ Glavne klase:
 - `partnerId` (string)
 - `value` (int 1-5)
 
-## 6. Dozvole (permissions)
+## 7. Dozvole (permissions)
 
 Iz `AndroidManifest.xml`:
 
@@ -121,7 +146,7 @@ Iz `AndroidManifest.xml`:
 - `READ_EXTERNAL_STORAGE`
 - `INTERNET`
 
-## 7. Podesavanja i kljucevi
+## 8. Podesavanja i kljucevi
 
 U projektu su hardkodovani primeri kljuceva:
 
@@ -138,7 +163,7 @@ Firebase konfiguracija:
 
 - `app/google-services.json` vec postoji u repozitorijumu
 
-## 8. Pokretanje projekta
+## 9. Pokretanje projekta
 
 1. Otvori projekat u Android Studio
 2. Sync Gradle
@@ -150,7 +175,7 @@ CLI build (opciono):
 ./gradlew assembleDebug
 ```
 
-## 9. Firebase Cloud Functions
+## 10. Firebase Cloud Functions
 
 U `functions/` postoji funkcija:
 
@@ -169,3 +194,24 @@ Deploy:
 ```
 firebase deploy --only functions
 ```
+
+## 11. Razvoj, testiranje i ogranicenja
+
+### Razvoj i lokalno testiranje
+
+- Android Studio: pokretanje na emulatoru ili fizickom uredjaju.
+- Google Maps zahteva validan API key i dozvole za lokaciju.
+- Notifikacije zahtevaju `POST_NOTIFICATIONS` (Android 13+).
+
+### Testovi
+
+Trenutno nisu definisani automatski testovi u projektu. Preporuka je da se dodaju:
+
+- UI testovi za navigaciju i osnovne tokove.
+- Unit testovi za filtriranje i racunanje ocena.
+
+### Ogranicenja i napomene
+
+- Aktivnosti se uklanjaju svakog dana u 03:00 ako su istekle (`eventTimestamp` <= sada).
+- Notifikacije imaju cooldown od 10 minuta po aktivnosti.
+- Kljucevi su trenutno upisani u kodu/manifestu i treba ih premestiti u bezbedne konfiguracije pre produkcije.
